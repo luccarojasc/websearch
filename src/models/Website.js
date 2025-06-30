@@ -1,67 +1,41 @@
-const db = require('../db/Database');
-const Logger = require('../utils/Logger');
+const express = require('express');
+const router = express.Router();
+const sessionChecker = require('../middlewares/sessionChecker');
+const Website = require('../models/Website');
 
-class Website {
-  static async insertWebsite({ url, title, description, keywords }) {
-    if (!url || !title || !keywords || !Array.isArray(keywords)) {
-      const error = new Error("Campos obrigatórios ausentes ao inserir website.");
-      Logger.logError(error);
-      throw error;
-    }
+router.use(sessionChecker);
 
-    try {
-      const database = db.getDb();
-      const websites = database.collection('websites');
+router.post('/add', async (req, res) => {
+  const { url, title, description, keywords } = req.body;
 
-      const existing = await websites.findOne({ url });
-      if (existing) {
-        console.log(`Website já existe: ${url}`);
-        return;
-      }
-
-      await websites.insertOne({
-        url,
-        title,
-        description: description || '',
-        keywords,
-        createdAt: new Date()
-      });
-
-      console.log(`Website inserido com sucesso: ${url}`);
-    } catch (error) {
-      Logger.logError(error);
-      throw error;
-    }
+  if (!url || !title || !Array.isArray(keywords) || keywords.length === 0) {
+    return res.status(400).json({ error: 'Todos os campos sao obrigatorios' });
   }
 
-  static async searchByKeyword(keyword) {
-    try {
-      const database = db.getDb();
-      const websites = database.collection('websites');
-
-      const results = await websites.find({
-        keywords: keyword
-      }).toArray();
-
-      return results;
-    } catch (error) {
-      Logger.logError(error);
-      throw error;
-    }
+  try {
+    await Website.insertWebsite({ url, title, description, keywords });
+    res.status(201).json({ message: 'Website cadastrado com sucesso' });
+  } catch (error) {
+    Logger.logError(error);
+    console.error("Erro detalhado ao inserir website:", error);
+    throw error;
   }
 
-  static async deleteWebsite(url) {
-    try {
-      const database = db.getDb();
-      const websites = database.collection('websites');
+});
 
-      await websites.deleteOne({ url });
-      console.log(`Website removido: ${url}`);
-    } catch (error) {
-      Logger.logError(error);
-      throw error;
-    }
+router.get('/search', async (req, res) => {
+  const { keyword } = req.query;
+
+  if (!keyword) {
+    return res.status(400).json({ error: 'Palavra-chave e obrigatoria' });
   }
-}
 
-module.exports = Website;
+  try {
+    const results = await Website.searchByKeyword(keyword);
+    res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar websites' });
+  }
+});
+
+module.exports = router;
